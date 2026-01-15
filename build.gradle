@@ -1,0 +1,122 @@
+plugins {
+    id 'java'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group = 'com.deathraid'
+version = '1.0.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+repositories {
+    mavenCentral()
+    
+    // Hytale modding maven repository
+    maven {
+        name = 'HytaleModding'
+        url = 'https://maven.hytale-modding.info/'
+    }
+    
+    // Buuz135's maven for Simple Claims
+    maven {
+        name = 'Buuz135Maven'
+        url = 'https://maven.buuz135.com/'
+    }
+}
+
+dependencies {
+    // Hytale Server API - provided at runtime by the server
+    // Note: The exact artifact may vary - check maven.hytale-modding.info for current versions
+    compileOnly 'com.hypixel.hytale:hytale-server:+'
+    
+    // Simple Claims - for integration (compile only, provided at runtime)
+    compileOnly 'com.buuz135:simpleclaims:1.0.+'
+    
+    // Gson for JSON serialization (bundled with plugin)
+    implementation 'com.google.code.gson:gson:2.10.1'
+    
+    // JSR-305 annotations (Nonnull, Nullable)
+    compileOnly 'com.google.code.findbugs:jsr305:3.0.2'
+    
+    // Testing
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+// Shadow JAR configuration for bundling dependencies
+shadowJar {
+    archiveClassifier.set('')
+    archiveBaseName.set('DeathRaid')
+    
+    // Relocate Gson to avoid conflicts with other plugins
+    relocate 'com.google.gson', 'com.deathraid.libs.gson'
+    
+    // Only include implementation dependencies
+    dependencies {
+        include(dependency('com.google.code.gson:gson'))
+    }
+    
+    // Minimize the JAR
+    minimize {
+        exclude(dependency('com.google.code.gson:gson'))
+    }
+    
+    // Merge service files
+    mergeServiceFiles()
+}
+
+// Make build task depend on shadowJar
+build {
+    dependsOn shadowJar
+}
+
+// Process resources - copy manifest and config
+processResources {
+    filesMatching('manifest.json') {
+        expand(
+            'version': project.version,
+            'group': project.group
+        )
+    }
+}
+
+// Create a sources JAR
+task sourcesJar(type: Jar) {
+    from sourceSets.main.allSource
+    archiveClassifier.set('sources')
+}
+
+// Javadoc JAR
+task javadocJar(type: Jar) {
+    from javadoc
+    archiveClassifier.set('javadoc')
+}
+
+// Configure Javadoc
+javadoc {
+    options.addStringOption('Xdoclint:none', '-quiet')
+}
+
+// Clean task extension
+clean {
+    delete "${projectDir}/run"
+}
+
+// Task to copy the built JAR to the mods folder
+task installPlugin(type: Copy) {
+    dependsOn shadowJar
+    from shadowJar.archiveFile
+    into file("${System.getProperty('user.home')}/AppData/Roaming/Hytale/UserData/Mods")
+    
+    doLast {
+        println "Plugin installed to Hytale mods folder"
+    }
+}
